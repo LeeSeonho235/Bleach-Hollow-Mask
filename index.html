@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediaPipe - 손 + 얼굴 인식 + 호로 눈</title>
+  <title>Bleach Hollow Mask</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -19,7 +19,6 @@
     }
     #out { z-index: 2; pointer-events: none; }
     
-    /* 상태 표시 */
     .status {
       position: fixed;
       top: 20px;
@@ -38,39 +37,28 @@
   <canvas id="out"></canvas>
   
   <div class="status">
-    <div>👁️ 호로 눈: <span id="eye-status">로딩중...</span></div>
+    <div>🎭 마스크: <span id="mask-status">로딩중...</span></div>
   </div>
 
   <script>
     const vElement = document.getElementById('v_src');
     const cElement = document.getElementById('out');
     const ctx = cElement.getContext('2d');
-    const eyeStatus = document.getElementById('eye-status');
+    const maskStatus = document.getElementById('mask-status');
 
     let handResults = null;
     let faceResults = null;
     
-    // 호로 눈 이미지 로드
-    const hollowEyeImg = new Image();
-    hollowEyeImg.src = 'assets/left_eye.png';
-    hollowEyeImg.onload = () => {
-        eyeStatus.textContent = '✅ 준비됨';
-        console.log('✅ 호로 눈 이미지 로드 완료!');
-    };
-    hollowEyeImg.onerror = () => {
-        eyeStatus.textContent = '❌ 로드 실패';
-        console.error('❌ 호로 눈 이미지 로드 실패!');
-        console.error('확인: assets/left_eye.png 파일이 있는지 확인하세요!');
-    };
-
     // 호로 마스크 이미지 로드
-    const hollowMaskImg = new Image();
-    hollowMaskImg.src = 'assets/hollow_mask.png';
-    hollowMaskImg.onload = () => {
-        console.log('✅ 호로 마스크 이미지 로드 완료!');
+    const fullMaskImg = new Image();
+    fullMaskImg.src = 'assets/full_mask.png';
+    fullMaskImg.onload = () => {
+        maskStatus.textContent = '✅ 준비됨';
+        console.log('✅ 호로 마스크 로드 완료!');
     };
-    hollowMaskImg.onerror = () => {
-        console.error('❌ 호로 마스크 이미지 로드 실패!');
+    fullMaskImg.onerror = () => {
+        maskStatus.textContent = '❌ 로드 실패';
+        console.error('❌ 호로 마스크 로드 실패!');
     };
 
     // 그리기 함수
@@ -89,29 +77,18 @@
             });
         }
 
-        // 얼굴 그리기 (Face Mesh)
+        // 얼굴 그리기
         if (faceResults?.multiFaceLandmarks) {
             faceResults.multiFaceLandmarks.forEach((landmarks) => {
                 // 얼굴 메쉬
                 drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
-                
-                // 오른쪽 눈 (빨간색)
                 drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
-                
-                // 왼쪽 눈 (초록색) - 여기에 호로 눈 넣을 거예요
                 drawConnectors(ctx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
-                
-                // 입술
                 drawConnectors(ctx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
 
-                // 호로 마스크 그리기 (먼저!)
-                if (hollowMaskImg.complete) {
-                    drawHollowMask(landmarks);
-                }
-
-                // 호로 눈 이미지 그리기 (마스크 위에)
-                if (hollowEyeImg.complete) {
-                    drawHollowEye(landmarks);
+                // 마스크 그리기
+                if (fullMaskImg.complete) {
+                    drawFullMask(landmarks);
                 }
             });
         }
@@ -119,77 +96,40 @@
         ctx.restore();
     }
 
-    // 호로 눈 이미지 그리기 (원본 방향 그대로!)
-    function drawHollowEye(landmarks) {
-        // 미러링 때문에 RIGHT_EYE 랜드마크가 초록색 눈!
-        const rightEyeOuter = landmarks[263];   // 바깥 모서리
-        const rightEyeInner = landmarks[362];   // 안쪽 모서리
-        const rightEyeCenter = landmarks[473];  // 홍채 중심 (검정 동공!)
-
+    // 전체 마스크 그리기 (양쪽 눈 맞춤!)
+    function drawFullMask(landmarks) {
         const w = cElement.width;
         const h = cElement.height;
 
-        // 홍채 중심에 정확히 배치
-        const eyeCenterX = rightEyeCenter.x * w;
-        const eyeCenterY = rightEyeCenter.y * h;
+        // 양쪽 눈 위치
+        const leftEye = landmarks[468];   // 왼쪽 눈 중심
+        const rightEye = landmarks[473];  // 오른쪽 눈 중심
 
-        // 눈 전체 너비 계산
-        const eyeWidth = Math.abs(rightEyeOuter.x - rightEyeInner.x) * w;
+        // 두 눈 사이 거리
+        const eyeDistanceX = Math.abs(leftEye.x - rightEye.x) * w;
+        
+        // 두 눈 중심점
+        const eyesCenterX = ((leftEye.x + rightEye.x) / 2) * w;
+        const eyesCenterY = ((leftEye.y + rightEye.y) / 2) * h;
 
-        // 호로 눈 크기 = 초록색 원 안에 딱 맞게 (눈 너비의 약 2.0배)
-        const imgWidth = eyeWidth * 2.0;
-        const imgHeight = imgWidth * (hollowEyeImg.height / hollowEyeImg.width);
+        // 마스크 크기 (눈 거리 기준)
+        const maskWidth = eyeDistanceX * 4.5;  // 눈 거리의 4.5배
+        const maskHeight = maskWidth * (fullMaskImg.height / fullMaskImg.width);
 
-        // 이미지를 원본 방향으로 그리기 (캔버스 미러링 상쇄)
+        // 마스크 이미지에서 눈들의 상대 위치 (이미지의 약 50% 가로, 35% 세로)
+        const maskEyesCenterX = maskWidth * 0.5;
+        const maskEyesCenterY = maskHeight * 0.35;
+
+        // 마스크 위치 계산 (마스크의 눈 중심 = 실제 눈 중심)
+        const maskX = eyesCenterX - maskEyesCenterX;
+        const maskY = eyesCenterY - maskEyesCenterY;
+
+        // 마스크 그리기 (원본 방향)
         ctx.save();
-        ctx.scale(-1, 1);  // 좌우 반전 상쇄 (캔버스가 이미 scaleX(-1)이므로)
+        ctx.scale(-1, 1);  // 미러링 상쇄
         ctx.drawImage(
-            hollowEyeImg,
-            -(eyeCenterX + imgWidth / 2),  // 반전된 좌표계에서 위치 조정
-            eyeCenterY - imgHeight / 2,
-            imgWidth,
-            imgHeight
-        );
-        ctx.restore();
-    }
-
-    // 호로 마스크 그리기 (노란 눈을 빨간 눈에 맞춤!)
-    function drawHollowMask(landmarks) {
-        const w = cElement.width;
-        const h = cElement.height;
-
-        // 얼굴 주요 포인트
-        const nose = landmarks[1];           // 코 중심
-        const leftEye = landmarks[468];      // 왼쪽 눈
-        const rightEye = landmarks[473];     // 오른쪽 눈 (빨간색)
-        const forehead = landmarks[10];      // 이마
-        const chin = landmarks[152];         // 턱
-
-        // 빨간 눈 위치 (마스크의 노란 눈이 여기 와야 함)
-        const rightEyeX = rightEye.x * w;
-        const rightEyeY = rightEye.y * h;
-
-        // 얼굴 크기 계산
-        const faceWidth = Math.abs(leftEye.x - rightEye.x) * w * 3.5;
-
-        // 마스크 크기
-        const maskWidth = faceWidth * 0.85;
-        const maskHeight = maskWidth * (hollowMaskImg.height / hollowMaskImg.width);
-
-        // 마스크 이미지에서 노란 눈의 위치 (이미지의 약 65% 지점)
-        const eyeOffsetX = maskWidth * 0.65;
-        const eyeOffsetY = maskHeight * 0.42;
-
-        // 마스크 왼쪽 상단 위치 계산 (노란 눈이 빨간 눈에 오도록)
-        const maskX = rightEyeX - eyeOffsetX;
-        const maskY = rightEyeY - eyeOffsetY;
-
-        // 마스크 그리기 (원본 방향으로)
-        ctx.save();
-        ctx.scale(-1, 1);  // 좌우 반전 상쇄
-        ctx.drawImage(
-            hollowMaskImg,
-            -(maskX + maskWidth),  // 반전된 좌표계
+            fullMaskImg,
+            -(maskX + maskWidth),
             maskY,
             maskWidth,
             maskHeight
@@ -245,7 +185,7 @@
     
     cam.start();
 
-    console.log('✅ 손 + 얼굴 + 호로 눈 추적!');
+    console.log('✅ 간단 버전: 전체 마스크만!');
   </script>
 </body>
 </html>
