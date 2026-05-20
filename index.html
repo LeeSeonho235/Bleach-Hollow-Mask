@@ -50,6 +50,7 @@
 <body>
   <!-- 영압 배경 비디오 -->
   <video id="aura-video" autoplay loop muted playsinline>
+    <source src="assets/ichigo_reiatsu.mov" type="video/quicktime">
     <source src="assets/ichigo_reiatsu.mov" type="video/mp4">
   </video>
   
@@ -58,6 +59,7 @@
   
   <div class="status">
     <div>🎭 마스크: <span id="mask-status">로딩중...</span></div>
+    <div>🔥 영압: <span id="aura-status">로딩중...</span></div>
   </div>
 
   <script>
@@ -65,13 +67,29 @@
     const cElement = document.getElementById('out');
     const ctx = cElement.getContext('2d');
     const maskStatus = document.getElementById('mask-status');
+    const auraStatus = document.getElementById('aura-status');
+    const auraVideo = document.getElementById('aura-video');
 
     let handResults = null;
     let faceResults = null;
     
+    // 영압 비디오 상태 모니터링
+    auraVideo.onloadeddata = () => {
+        auraStatus.textContent = '✅ 준비됨';
+        console.log('✅ 영압 비디오 로드 완료!');
+        auraVideo.play().catch(e => console.error('영압 재생 실패:', e));
+    };
+    auraVideo.onerror = () => {
+        auraStatus.textContent = '❌ 로드 실패';
+        console.error('❌ 영압 비디오 로드 실패!');
+    };
+    auraVideo.onplay = () => {
+        console.log('✅ 영압 재생 중!');
+    };
+    
     // 호로 마스크 이미지 로드
     const fullMaskImg = new Image();
-    fullMaskImg.src = 'assets/full_mask.png';
+    fullMaskImg.src = 'assets/hollow_mask.png';  // 파일명 수정!
     fullMaskImg.onload = () => {
         maskStatus.textContent = '✅ 준비됨';
         console.log('✅ 호로 마스크 로드 완료!');
