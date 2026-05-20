@@ -112,8 +112,8 @@
         const eyesCenterX = ((leftEye.x + rightEye.x) / 2) * w;
         const eyesCenterY = ((leftEye.y + rightEye.y) / 2) * h;
 
-        // 마스크 크기 (눈 거리 기준)
-        const maskWidth = eyeDistanceX * 4.5;  // 눈 거리의 4.5배
+        // 마스크 크기 (눈 거리 기준 - 작게!)
+        const maskWidth = eyeDistanceX * 2.8;  // 눈 거리의 2.8배로 축소
         const maskHeight = maskWidth * (fullMaskImg.height / fullMaskImg.width);
 
         // 마스크 이미지에서 눈들의 상대 위치 (이미지의 약 50% 가로, 35% 세로)
