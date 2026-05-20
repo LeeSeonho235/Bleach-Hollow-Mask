@@ -26,7 +26,7 @@
       opacity: 0.9;
     }
     
-    /* 카메라 비디오 - 숨김! (캔버스에만 그림) */
+    /* 카메라 비디오 - 보이게! */
     #v_src {
       position: absolute;
       top: 0;
@@ -35,11 +35,10 @@
       height: 100vh;
       object-fit: cover;
       transform: scaleX(-1);
-      opacity: 0;  /* 숨김! */
-      pointer-events: none;
+      z-index: 1;
     }
     
-    /* 캔버스 - 사람 + 마스크 */
+    /* 캔버스 - 마스크만! (투명 배경) */
     #out {
       position: absolute;
       top: 0;
@@ -123,9 +122,7 @@
 
         ctx.save();
         ctx.clearRect(0, 0, cElement.width, cElement.height);
-
-        // 카메라 영상 그리기 (맨 먼저! 뒤에 영압이 보이게)
-        ctx.drawImage(vElement, 0, 0, cElement.width, cElement.height);
+        // 캔버스를 투명하게! (카메라는 v_src에서 보임)
 
         // 손 그리기
         if (handResults?.multiHandLandmarks) {
