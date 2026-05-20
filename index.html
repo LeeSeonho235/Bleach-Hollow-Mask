@@ -52,7 +52,7 @@
     
     // 호로 눈 이미지 로드
     const hollowEyeImg = new Image();
-    hollowEyeImg.src = 'assets/left_eye.png';  // assets 폴더 안!
+    hollowEyeImg.src = 'assets/왼쪽_눈.png';  // 실제 파일 이름!
     hollowEyeImg.onload = () => {
         eyeStatus.textContent = '✅ 준비됨';
         console.log('✅ 호로 눈 이미지 로드 완료!');
@@ -60,6 +60,7 @@
     hollowEyeImg.onerror = () => {
         eyeStatus.textContent = '❌ 로드 실패';
         console.error('❌ 호로 눈 이미지 로드 실패!');
+        console.error('확인: assets/왼쪽_눈.png 파일이 있는지 확인하세요!');
     };
 
     // 그리기 함수
@@ -103,36 +104,31 @@
         ctx.restore();
     }
 
-    // 호로 눈 이미지 그리기
+    // 호로 눈 이미지 그리기 (초록색 눈에 정확히!)
     function drawHollowEye(landmarks) {
-        // Face Mesh 왼쪽 눈 랜드마크 (초록색 눈)
-        // 33: 외측 모서리
-        // 133: 내측 모서리
-        // 159: 위쪽
-        // 145: 아래쪽
-        
-        const leftEyeOuter = landmarks[33];   // 바깥쪽
-        const leftEyeInner = landmarks[133];  // 안쪽
-        const leftEyeTop = landmarks[159];    // 위
-        const leftEyeBottom = landmarks[145]; // 아래
+        // Face Mesh 왼쪽 눈 (초록색) 정확한 랜드마크
+        const leftEyeOuter = landmarks[33];    // 바깥 모서리
+        const leftEyeInner = landmarks[133];   // 안쪽 모서리
+        const leftEyeTop = landmarks[159];     // 위쪽
+        const leftEyeBottom = landmarks[145];  // 아래쪽
+        const leftEyeCenter = landmarks[468];  // 정확한 중심점!
 
-        // 캔버스 크기
         const w = cElement.width;
         const h = cElement.height;
 
-        // 눈 중심 계산
-        const eyeCenterX = (leftEyeOuter.x + leftEyeInner.x) / 2 * w;
-        const eyeCenterY = (leftEyeTop.y + leftEyeBottom.y) / 2 * h;
+        // 눈 정확한 중심 (랜드마크 468 사용)
+        const eyeCenterX = leftEyeCenter.x * w;
+        const eyeCenterY = leftEyeCenter.y * h;
 
-        // 눈 크기 계산
+        // 눈 실제 크기 계산
         const eyeWidth = Math.abs(leftEyeOuter.x - leftEyeInner.x) * w;
         const eyeHeight = Math.abs(leftEyeTop.y - leftEyeBottom.y) * h;
 
-        // 호로 눈 이미지 크기 (좀 더 크게)
-        const imgWidth = eyeWidth * 3.5;
+        // 호로 눈 크기 (눈알 크기에 맞춤 - 2.2배)
+        const imgWidth = eyeWidth * 2.2;
         const imgHeight = imgWidth * (hollowEyeImg.height / hollowEyeImg.width);
 
-        // 이미지 그리기 (중앙 정렬)
+        // 초록색 눈 안쪽에 정확히 배치
         ctx.drawImage(
             hollowEyeImg,
             eyeCenterX - imgWidth / 2,
