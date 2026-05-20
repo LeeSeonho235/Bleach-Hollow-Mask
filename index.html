@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediaPipe Hands - 기본 손 인식</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+  <style>
+    body { margin: 0; overflow: hidden; background-color: #111; }
+    /* 웹캠과 캔버스를 화면에 가득 채우고 거울 모드(scaleX(-1)) 적용 */
+    #v_src, #out {
+      position: absolute; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover; transform: scaleX(-1);
+    }
+    #out { z-index: 2; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <video id="v_src" autoplay playsinline></video>
+  <canvas id="out"></canvas>
+
+  <script>
+    const vElement = document.getElementById('v_src');
+    const cElement = document.getElementById('out');
+    const ctx = cElement.getContext('2d');
+
+    // MediaPipe 가 손을 인식한 후 실행할 콜백 함수
+    function onResults(res) {
+        // 캔버스 크기를 웹캠 영상 해상도와 동기화
+        cElement.width = vElement.videoWidth;
+        cElement.height = vElement.videoHeight;
+
+        ctx.save();
+        // 매 프레임마다 이전 그림을 지워줌
+        ctx.clearRect(0, 0, cElement.width, cElement.height);
+
+        // 손이 인식되었다면
+        if (res.multiHandLandmarks) {
+            res.multiHandLandmarks.forEach((pts) => {
+                // 1. 손가락 마디들을 잇는 선 그리기 (초록색)
+                drawConnectors(ctx, pts, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+                // 2. 손가락 관절 포인트 점 그리기 (빨간색)
+                drawLandmarks(ctx, pts, { color: '#FF0000', lineWidth: 2, radius: 4 });
+            });
+        }
+        ctx.restore();
+    }
+
+    // MediaPipe Hands 객체 초기화 및 웹 에셋 경로 지정
+    const h = new Hands({
+        locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+    });
+
+    // 인식 옵션 설정
+    h.setOptions({
+        maxNumHands: 2,           // 동시에 인식할 최대 손 개수
+        modelComplexity: 1,       // 모델 정확도 (0: 빠름, 1: 밸런스)
+        minDetectionConfidence: 0.5, // 손 인식 최소 신뢰도
+        minTrackingConfidence: 0.5  // 추적 최소 신뢰도
+    });
+
+    // 인식 결과가 나올 때 실행할 함수 연결
+    h.onResults(onResults);
+
+    // 웹캠 카메라 시작 및 MediaPipe 연결
+    const cam = new Camera(vElement, {
+        onFrame: async () => { 
+            await h.send({ image: vElement }); 
+        },
+        width: 1280, 
+        height: 720
+    });
+    
+    cam.start();
+  </script>
+</body>
+</html>
