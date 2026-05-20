@@ -63,6 +63,16 @@
         console.error('확인: assets/left_eye.png 파일이 있는지 확인하세요!');
     };
 
+    // 호로 마스크 이미지 로드
+    const hollowMaskImg = new Image();
+    hollowMaskImg.src = 'assets/hollow_mask.png';
+    hollowMaskImg.onload = () => {
+        console.log('✅ 호로 마스크 이미지 로드 완료!');
+    };
+    hollowMaskImg.onerror = () => {
+        console.error('❌ 호로 마스크 이미지 로드 실패!');
+    };
+
     // 그리기 함수
     function draw() {
         cElement.width = vElement.videoWidth;
@@ -94,7 +104,12 @@
                 // 입술
                 drawConnectors(ctx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
 
-                // 호로 눈 이미지 그리기 (초록색 눈 위에)
+                // 호로 마스크 그리기 (먼저!)
+                if (hollowMaskImg.complete) {
+                    drawHollowMask(landmarks);
+                }
+
+                // 호로 눈 이미지 그리기 (마스크 위에)
                 if (hollowEyeImg.complete) {
                     drawHollowEye(landmarks);
                 }
@@ -134,6 +149,43 @@
             eyeCenterY - imgHeight / 2,
             imgWidth,
             imgHeight
+        );
+        ctx.restore();
+    }
+
+    // 호로 마스크 그리기 (얼굴 오른쪽에!)
+    function drawHollowMask(landmarks) {
+        const w = cElement.width;
+        const h = cElement.height;
+
+        // 얼굴 주요 포인트
+        const nose = landmarks[1];           // 코 중심
+        const leftEye = landmarks[468];      // 왼쪽 눈
+        const rightEye = landmarks[473];     // 오른쪽 눈
+        const forehead = landmarks[10];      // 이마
+        const chin = landmarks[152];         // 턱
+
+        // 양쪽 눈 중심점 계산
+        const eyesCenterX = ((leftEye.x + rightEye.x) / 2) * w;
+        const eyesCenterY = ((leftEye.y + rightEye.y) / 2) * h;
+
+        // 얼굴 크기 계산
+        const faceHeight = Math.abs(forehead.y - chin.y) * h;
+        const faceWidth = Math.abs(leftEye.x - rightEye.x) * w * 3.5;  // 눈 간격 기준
+
+        // 마스크 크기 (얼굴보다 약간 크게)
+        const maskWidth = faceWidth * 1.2;
+        const maskHeight = maskWidth * (hollowMaskImg.height / hollowMaskImg.width);
+
+        // 마스크 그리기 (원본 방향으로)
+        ctx.save();
+        ctx.scale(-1, 1);  // 좌우 반전 상쇄
+        ctx.drawImage(
+            hollowMaskImg,
+            -(eyesCenterX + maskWidth / 2),
+            eyesCenterY - maskHeight / 2,
+            maskWidth,
+            maskHeight
         );
         ctx.restore();
     }
