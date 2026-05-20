@@ -62,7 +62,7 @@
 <body>
   <!-- 영압 배경 비디오 -->
   <video id="aura-video" autoplay loop muted playsinline>
-    <source src="assets/ichigo_reiatsu.mp4" type="video/mp4">
+    <source src="assets/ichigo_reiatsu.mov" type="video/quicktime">
   </video>
   
   <video id="v_src" autoplay playsinline></video>
@@ -129,7 +129,7 @@
         // 1. 카메라 영상 먼저 그리기 (배경)
         ctx.drawImage(vElement, 0, 0, w, h);
 
-        // 2. 영압 그리기 (더 진하게!)
+        // 2. 영압 그리기 (투명 배경 자동 처리!)
         if (auraVideo.readyState >= 2) {
             try {
                 // 영압 비디오 크기 계산
@@ -140,13 +140,9 @@
                 // 맨 밑에 배치 (동그라미가 화면 맨 밑에)
                 const auraY = h - auraHeight;
                 
-                // screen 블렌드 모드 - 어두운 부분(초록/검정) 투명!
-                ctx.globalCompositeOperation = 'screen';
-                ctx.globalAlpha = 1.0;  // 완전 불투명 - 진하게!
+                // MOV 알파 채널로 자동 투명 처리!
+                ctx.globalAlpha = 1.0;
                 ctx.drawImage(auraVideo, 0, auraY, auraWidth, auraHeight);
-                
-                // 원래 모드로 복원
-                ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 1.0;
             } catch (e) {
                 console.error('영압 그리기 실패:', e);
