@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediaPipe Hands - 기본 손 인식</title>
+  <title>MediaPipe - 손 & 얼굴 동시 인식</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
   <style>
     body { margin: 0; overflow: hidden; background-color: #111; }
-    /* 웹캠과 캔버스를 화면에 가득 채우고 거울 모드(scaleX(-1)) 적용 */
     #v_src, #out {
       position: absolute; top: 0; left: 0;
       width: 100vw; height: 100vh;
@@ -22,7 +22,7 @@
 </head>
 <body>
 
-  <video id="v_src" autoplay playsinline></video>
+  <video id="v_src" autoplay playsinline style="display: none;"></video>
   <canvas id="out"></canvas>
 
   <script>
@@ -30,53 +30,84 @@
     const cElement = document.getElementById('out');
     const ctx = cElement.getContext('2d');
 
-    // MediaPipe 가 손을 인식한 후 실행할 콜백 함수
-    function onResults(res) {
-        // 캔버스 크기를 웹캠 영상 해상도와 동기화
+    // 각 모델의 최신 결과 데이터를 저장할 변수
+    let latestHandResults = null;
+    let latestFaceResults = null;
+
+    // 통합 캔버스 드로잉 함수 (매 프레임마다 두 결과를 한 번에 그림)
+    function drawEverything() {
         cElement.width = vElement.videoWidth;
         cElement.height = vElement.videoHeight;
 
         ctx.save();
-        // 매 프레임마다 이전 그림을 지워줌
         ctx.clearRect(0, 0, cElement.width, cElement.height);
 
-        // 손이 인식되었다면
-        if (res.multiHandLandmarks) {
-            res.multiHandLandmarks.forEach((pts) => {
-                // 1. 손가락 마디들을 잇는 선 그리기 (초록색)
-                drawConnectors(ctx, pts, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-                // 2. 손가락 관절 포인트 점 그리기 (빨간색)
-                drawLandmarks(ctx, pts, { color: '#FF0000', lineWidth: 2, radius: 4 });
+        // 1. 얼굴 인식 결과 그리기
+        if (latestFaceResults && latestFaceResults.detections) {
+            latestFaceResults.detections.forEach((detection) => {
+                // 얼굴 사각형 (초록색)
+                drawRectangle(ctx, detection.boundingBox, { color: '#00FF00', lineWidth: 4 });
+                // 얼굴 특징점 (빨간색)
+                if (detection.landmarks) {
+                    drawLandmarks(ctx, detection.landmarks, { color: '#FF0000', radius: 4 });
+                }
             });
         }
+
+        // 2. 손 인식 결과 그리기
+        if (latestHandResults && latestHandResults.multiHandLandmarks) {
+            latestHandResults.multiHandLandmarks.forEach((pts) => {
+                // 손가락 마디 연결선 (시안/하늘색)
+                drawConnectors(ctx, pts, HAND_CONNECTIONS, { color: '#00FFFF', lineWidth: 4 });
+                // 관절 포인트 (흰색)
+                drawLandmarks(ctx, pts, { color: '#FFFFFF', lineWidth: 2, radius: 4 });
+            });
+        }
+
         ctx.restore();
     }
 
-    // MediaPipe Hands 객체 초기화 및 웹 에셋 경로 지정
-    const h = new Hands({
+    // --- MediaPipe Hands 설정 ---
+    const hands = new Hands({
         locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
     });
-
-    // 인식 옵션 설정
-    h.setOptions({
-        maxNumHands: 2,           // 동시에 인식할 최대 손 개수
-        modelComplexity: 1,       // 모델 정확도 (0: 빠름, 1: 밸런스)
-        minDetectionConfidence: 0.5, // 손 인식 최소 신뢰도
-        minTrackingConfidence: 0.5  // 추적 최소 신뢰도
+    hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+    hands.onResults((results) => {
+        latestHandResults = results;
+        drawEverything(); // 손 결과 갱신되면 화면 다시 그리기
     });
 
-    // 인식 결과가 나올 때 실행할 함수 연결
-    h.onResults(onResults);
+    // --- MediaPipe Face Detection 설정 ---
+    const faceDetection = new FaceDetection({
+        locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}`
+    });
+    faceDetection.setOptions({
+        modelSelection: 0,
+        minDetectionConfidence: 0.5
+    });
+    faceDetection.onResults((results) => {
+        latestFaceResults = results;
+        // 얼추 같은 타이밍에 렌더링되도록 drawEverything 호출
+    });
 
-    // 웹캠 카메라 시작 및 MediaPipe 연결
+    // --- 카메라 세팅 및 두 모델에 프레임 동시 전송 ---
     const cam = new Camera(vElement, {
-        onFrame: async () => { 
-            await h.send({ image: vElement }); 
+        onFrame: async () => {
+            // 한 프레임의 이미지를 손과 얼굴 모델에 각각 동시에 쏘아줍니다.
+            await Promise.all([
+                hands.send({ image: vElement }),
+                faceDetection.send({ image: vElement })
+            ]);
         },
-        width: 1280, 
+        width: 1280,
         height: 720
     });
-    
+
     cam.start();
   </script>
 </body>
