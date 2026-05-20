@@ -3,30 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediaPipe - 손 & 얼굴 동시 인식</title>
+  <title>MediaPipe - 손 + 얼굴 인식</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
   <style>
     body { margin: 0; overflow: hidden; background-color: #111; }
-    /* 웹캠 비디오는 렌더링 에러 방지를 위해 display: none 대신 화면 밖으로 숨김 */
-    #v_src {
-      position: absolute; width: 1px; height: 1px; opacity: 0;
-    }
-    #out {
+    #v_src, #out {
       position: absolute; top: 0; left: 0;
       width: 100vw; height: 100vh;
       object-fit: cover; transform: scaleX(-1);
-      z-index: 2; pointer-events: none;
     }
+    #out { z-index: 2; pointer-events: none; }
   </style>
 </head>
 <body>
-
+  <!-- 비디오 1개만! -->
   <video id="v_src" autoplay playsinline></video>
+  <!-- 캔버스 1개만! -->
   <canvas id="out"></canvas>
 
   <script>
@@ -34,44 +31,51 @@
     const cElement = document.getElementById('out');
     const ctx = cElement.getContext('2d');
 
-    let latestHandResults = null;
-    let latestFaceResults = null;
+    let handResults = null;
+    let faceResults = null;
 
-    // 통합 캔버스 드로잉 함수
-    function drawEverything() {
-        // 영상 데이터가 아직 로드되지 않았다면 스킵
-        if (!vElement.videoWidth || !vElement.videoHeight) return;
-
-        if (cElement.width !== vElement.videoWidth || cElement.height !== vElement.videoHeight) {
-            cElement.width = vElement.videoWidth;
-            cElement.height = vElement.videoHeight;
-        }
+    // 그리기 함수
+    function draw() {
+        cElement.width = vElement.videoWidth;
+        cElement.height = vElement.videoHeight;
 
         ctx.save();
         ctx.clearRect(0, 0, cElement.width, cElement.height);
 
-        // 1. 얼굴 인식 결과 그리기
-        if (latestFaceResults && latestFaceResults.detections) {
-            latestFaceResults.detections.forEach((detection) => {
-                drawRectangle(ctx, detection.boundingBox, { color: '#00FF00', lineWidth: 4 });
-                if (detection.landmarks) {
-                    drawLandmarks(ctx, detection.landmarks, { color: '#FF0000', radius: 4 });
-                }
+        // 손 그리기
+        if (handResults?.multiHandLandmarks) {
+            handResults.multiHandLandmarks.forEach((pts) => {
+                drawConnectors(ctx, pts, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+                drawLandmarks(ctx, pts, { color: '#FF0000', lineWidth: 2, radius: 4 });
             });
         }
 
-        // 2. 손 인식 결과 그리기
-        if (latestHandResults && latestHandResults.multiHandLandmarks) {
-            latestHandResults.multiHandLandmarks.forEach((pts) => {
-                drawConnectors(ctx, pts, HAND_CONNECTIONS, { color: '#00FFFF', lineWidth: 4 });
-                drawLandmarks(ctx, pts, { color: '#FFFFFF', lineWidth: 2, radius: 4 });
+        // 얼굴 그리기 (Face Mesh)
+        if (faceResults?.multiFaceLandmarks) {
+            faceResults.multiFaceLandmarks.forEach((landmarks) => {
+                drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
+                drawConnectors(ctx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
+                drawConnectors(ctx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
             });
         }
 
         ctx.restore();
     }
 
-    // --- MediaPipe Hands 설정 ---
+    // 손 결과 처리
+    function onHandResults(results) {
+        handResults = results;
+        draw();
+    }
+
+    // 얼굴 결과 처리
+    function onFaceResults(results) {
+        faceResults = results;
+        draw();
+    }
+
+    // MediaPipe Hands 초기화
     const hands = new Hands({
         locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
     });
@@ -81,38 +85,33 @@
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
     });
-    hands.onResults((results) => {
-        latestHandResults = results;
-        drawEverything();
-    });
+    hands.onResults(onHandResults);
 
-    // --- MediaPipe Face Detection 설정 ---
-    const faceDetection = new FaceDetection({
-        locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}`
+    // MediaPipe Face Mesh 초기화
+    const faceMesh = new FaceMesh({
+        locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
     });
-    faceDetection.setOptions({
-        modelSelection: 0,
-        minDetectionConfidence: 0.5
+    faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
     });
-    faceDetection.onResults((results) => {
-        latestFaceResults = results;
-        drawEverything(); // 얼굴 결과가 올 때도 화면을 갱신하도록 추가
-    });
+    faceMesh.onResults(onFaceResults);
 
-    // --- 웹캠 작동 확인 후 카메라 루프 시작 ---
-    vElement.addEventListener('loadedmetadata', () => {
-        const cam = new Camera(vElement, {
-            onFrame: async () => {
-                await Promise.all([
-                    hands.send({ image: vElement }),
-                    faceDetection.send({ image: vElement })
-                ]);
-            },
-            width: 1280,
-            height: 720
-        });
-        cam.start();
+    // 카메라 시작
+    const cam = new Camera(vElement, {
+        onFrame: async () => { 
+            await hands.send({ image: vElement });
+            await faceMesh.send({ image: vElement });
+        },
+        width: 1280, 
+        height: 720
     });
+    
+    cam.start();
+
+    console.log('✅ 손 + 얼굴 동시 추적!');
   </script>
 </body>
 </html>
