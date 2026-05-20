@@ -13,14 +13,26 @@
   <style>
     body { margin: 0; overflow: hidden; background-color: #000; }
     
-    /* 영압 비디오 - 숨김 (캔버스에 그림) */
+    /* 영압 비디오 - 안 보이게 (but not display:none!) */
     #aura-video {
-      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
     }
     
-    /* 카메라 비디오 - 숨김 (캔버스에 그림) */
+    /* 카메라 비디오 - 안 보이게 (but not display:none!) */
     #v_src {
-      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
     }
     
     /* 캔버스 - 모든 것을 여기에! */
@@ -100,6 +112,12 @@
 
     // 그리기 함수
     function draw() {
+        // 비디오가 준비되지 않았으면 그리지 않음
+        if (!vElement.videoWidth || !vElement.videoHeight) {
+            requestAnimationFrame(draw);
+            return;
+        }
+
         cElement.width = vElement.videoWidth;
         cElement.height = vElement.videoHeight;
         const w = cElement.width;
@@ -108,46 +126,32 @@
         ctx.save();
         ctx.clearRect(0, 0, w, h);
 
-        // 1. 영압 그리기 (초록 제거! 맨 밑에 고정)
-        if (auraVideo.readyState >= 2) {
-            // 영압 비디오 크기 계산
-            const auraAspect = auraVideo.videoWidth / auraVideo.videoHeight;
-            const auraWidth = w;
-            const auraHeight = auraWidth / auraAspect;
-            
-            // 맨 밑에 배치 (동그라미가 화면 맨 밑에)
-            const auraY = h - auraHeight;
-            
-            // 임시 캔버스에 영압 그리기
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = auraWidth;
-            tempCanvas.height = auraHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(auraVideo, 0, 0, auraWidth, auraHeight);
-            
-            // 초록 제거 (크로마키)
-            const imageData = tempCtx.getImageData(0, 0, auraWidth, auraHeight);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                
-                // 초록색 감지 (g가 높고 r, b가 낮으면 초록)
-                if (g > 100 && g > r * 1.5 && g > b * 1.5) {
-                    data[i + 3] = 0;  // 투명하게!
-                }
-            }
-            tempCtx.putImageData(imageData, 0, 0);
-            
-            // 초록 제거된 영압 그리기
-            ctx.globalAlpha = 0.9;
-            ctx.drawImage(tempCanvas, 0, auraY, auraWidth, auraHeight);
-            ctx.globalAlpha = 1.0;
-        }
-
-        // 2. 카메라 영상 그리기
+        // 1. 카메라 영상 먼저 그리기 (배경)
         ctx.drawImage(vElement, 0, 0, w, h);
+
+        // 2. 영압 그리기 (더 진하게!)
+        if (auraVideo.readyState >= 2) {
+            try {
+                // 영압 비디오 크기 계산
+                const auraAspect = auraVideo.videoWidth / auraVideo.videoHeight;
+                const auraWidth = w;
+                const auraHeight = auraWidth / auraAspect;
+                
+                // 맨 밑에 배치 (동그라미가 화면 맨 밑에)
+                const auraY = h - auraHeight;
+                
+                // screen 블렌드 모드 - 어두운 부분(초록/검정) 투명!
+                ctx.globalCompositeOperation = 'screen';
+                ctx.globalAlpha = 1.0;  // 완전 불투명 - 진하게!
+                ctx.drawImage(auraVideo, 0, auraY, auraWidth, auraHeight);
+                
+                // 원래 모드로 복원
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1.0;
+            } catch (e) {
+                console.error('영압 그리기 실패:', e);
+            }
+        }
 
         // 3. 손 그리기
         if (handResults?.multiHandLandmarks) {
