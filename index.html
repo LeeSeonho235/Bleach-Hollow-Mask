@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediaPipe - 손 + 얼굴 인식</title>
+  <title>MediaPipe - 손 + 얼굴 인식 + 호로 눈</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -18,21 +18,49 @@
       object-fit: cover; transform: scaleX(-1);
     }
     #out { z-index: 2; pointer-events: none; }
+    
+    /* 상태 표시 */
+    .status {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: monospace;
+      z-index: 10;
+    }
   </style>
 </head>
 <body>
-  <!-- 비디오 1개만! -->
   <video id="v_src" autoplay playsinline></video>
-  <!-- 캔버스 1개만! -->
   <canvas id="out"></canvas>
+  
+  <div class="status">
+    <div>👁️ 호로 눈: <span id="eye-status">로딩중...</span></div>
+  </div>
 
   <script>
     const vElement = document.getElementById('v_src');
     const cElement = document.getElementById('out');
     const ctx = cElement.getContext('2d');
+    const eyeStatus = document.getElementById('eye-status');
 
     let handResults = null;
     let faceResults = null;
+    
+    // 호로 눈 이미지 로드
+    const hollowEyeImg = new Image();
+    hollowEyeImg.src = 'assets/left_eye.png';  // assets 폴더 안!
+    hollowEyeImg.onload = () => {
+        eyeStatus.textContent = '✅ 준비됨';
+        console.log('✅ 호로 눈 이미지 로드 완료!');
+    };
+    hollowEyeImg.onerror = () => {
+        eyeStatus.textContent = '❌ 로드 실패';
+        console.error('❌ 호로 눈 이미지 로드 실패!');
+    };
 
     // 그리기 함수
     function draw() {
@@ -53,14 +81,65 @@
         // 얼굴 그리기 (Face Mesh)
         if (faceResults?.multiFaceLandmarks) {
             faceResults.multiFaceLandmarks.forEach((landmarks) => {
+                // 얼굴 메쉬
                 drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                
+                // 오른쪽 눈 (빨간색)
                 drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
+                
+                // 왼쪽 눈 (초록색) - 여기에 호로 눈 넣을 거예요
                 drawConnectors(ctx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
+                
+                // 입술
                 drawConnectors(ctx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
+
+                // 호로 눈 이미지 그리기 (초록색 눈 위에)
+                if (hollowEyeImg.complete) {
+                    drawHollowEye(landmarks);
+                }
             });
         }
 
         ctx.restore();
+    }
+
+    // 호로 눈 이미지 그리기
+    function drawHollowEye(landmarks) {
+        // Face Mesh 왼쪽 눈 랜드마크 (초록색 눈)
+        // 33: 외측 모서리
+        // 133: 내측 모서리
+        // 159: 위쪽
+        // 145: 아래쪽
+        
+        const leftEyeOuter = landmarks[33];   // 바깥쪽
+        const leftEyeInner = landmarks[133];  // 안쪽
+        const leftEyeTop = landmarks[159];    // 위
+        const leftEyeBottom = landmarks[145]; // 아래
+
+        // 캔버스 크기
+        const w = cElement.width;
+        const h = cElement.height;
+
+        // 눈 중심 계산
+        const eyeCenterX = (leftEyeOuter.x + leftEyeInner.x) / 2 * w;
+        const eyeCenterY = (leftEyeTop.y + leftEyeBottom.y) / 2 * h;
+
+        // 눈 크기 계산
+        const eyeWidth = Math.abs(leftEyeOuter.x - leftEyeInner.x) * w;
+        const eyeHeight = Math.abs(leftEyeTop.y - leftEyeBottom.y) * h;
+
+        // 호로 눈 이미지 크기 (좀 더 크게)
+        const imgWidth = eyeWidth * 3.5;
+        const imgHeight = imgWidth * (hollowEyeImg.height / hollowEyeImg.width);
+
+        // 이미지 그리기 (중앙 정렬)
+        ctx.drawImage(
+            hollowEyeImg,
+            eyeCenterX - imgWidth / 2,
+            eyeCenterY - imgHeight / 2,
+            imgWidth,
+            imgHeight
+        );
     }
 
     // 손 결과 처리
@@ -111,7 +190,7 @@
     
     cam.start();
 
-    console.log('✅ 손 + 얼굴 동시 추적!');
+    console.log('✅ 손 + 얼굴 + 호로 눈 추적!');
   </script>
 </body>
 </html>
