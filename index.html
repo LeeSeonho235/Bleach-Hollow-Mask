@@ -12,17 +12,21 @@
 
   <style>
     body { margin: 0; overflow: hidden; background-color: #111; }
-    #v_src, #out {
+    /* 웹캠 비디오는 렌더링 에러 방지를 위해 display: none 대신 화면 밖으로 숨김 */
+    #v_src {
+      position: absolute; width: 1px; height: 1px; opacity: 0;
+    }
+    #out {
       position: absolute; top: 0; left: 0;
       width: 100vw; height: 100vh;
       object-fit: cover; transform: scaleX(-1);
+      z-index: 2; pointer-events: none;
     }
-    #out { z-index: 2; pointer-events: none; }
   </style>
 </head>
 <body>
 
-  <video id="v_src" autoplay playsinline style="display: none;"></video>
+  <video id="v_src" autoplay playsinline></video>
   <canvas id="out"></canvas>
 
   <script>
@@ -30,14 +34,18 @@
     const cElement = document.getElementById('out');
     const ctx = cElement.getContext('2d');
 
-    // 각 모델의 최신 결과 데이터를 저장할 변수
     let latestHandResults = null;
     let latestFaceResults = null;
 
-    // 통합 캔버스 드로잉 함수 (매 프레임마다 두 결과를 한 번에 그림)
+    // 통합 캔버스 드로잉 함수
     function drawEverything() {
-        cElement.width = vElement.videoWidth;
-        cElement.height = vElement.videoHeight;
+        // 영상 데이터가 아직 로드되지 않았다면 스킵
+        if (!vElement.videoWidth || !vElement.videoHeight) return;
+
+        if (cElement.width !== vElement.videoWidth || cElement.height !== vElement.videoHeight) {
+            cElement.width = vElement.videoWidth;
+            cElement.height = vElement.videoHeight;
+        }
 
         ctx.save();
         ctx.clearRect(0, 0, cElement.width, cElement.height);
@@ -45,9 +53,7 @@
         // 1. 얼굴 인식 결과 그리기
         if (latestFaceResults && latestFaceResults.detections) {
             latestFaceResults.detections.forEach((detection) => {
-                // 얼굴 사각형 (초록색)
                 drawRectangle(ctx, detection.boundingBox, { color: '#00FF00', lineWidth: 4 });
-                // 얼굴 특징점 (빨간색)
                 if (detection.landmarks) {
                     drawLandmarks(ctx, detection.landmarks, { color: '#FF0000', radius: 4 });
                 }
@@ -57,9 +63,7 @@
         // 2. 손 인식 결과 그리기
         if (latestHandResults && latestHandResults.multiHandLandmarks) {
             latestHandResults.multiHandLandmarks.forEach((pts) => {
-                // 손가락 마디 연결선 (시안/하늘색)
                 drawConnectors(ctx, pts, HAND_CONNECTIONS, { color: '#00FFFF', lineWidth: 4 });
-                // 관절 포인트 (흰색)
                 drawLandmarks(ctx, pts, { color: '#FFFFFF', lineWidth: 2, radius: 4 });
             });
         }
@@ -79,7 +83,7 @@
     });
     hands.onResults((results) => {
         latestHandResults = results;
-        drawEverything(); // 손 결과 갱신되면 화면 다시 그리기
+        drawEverything();
     });
 
     // --- MediaPipe Face Detection 설정 ---
@@ -92,23 +96,23 @@
     });
     faceDetection.onResults((results) => {
         latestFaceResults = results;
-        // 얼추 같은 타이밍에 렌더링되도록 drawEverything 호출
+        drawEverything(); // 얼굴 결과가 올 때도 화면을 갱신하도록 추가
     });
 
-    // --- 카메라 세팅 및 두 모델에 프레임 동시 전송 ---
-    const cam = new Camera(vElement, {
-        onFrame: async () => {
-            // 한 프레임의 이미지를 손과 얼굴 모델에 각각 동시에 쏘아줍니다.
-            await Promise.all([
-                hands.send({ image: vElement }),
-                faceDetection.send({ image: vElement })
-            ]);
-        },
-        width: 1280,
-        height: 720
+    // --- 웹캠 작동 확인 후 카메라 루프 시작 ---
+    vElement.addEventListener('loadedmetadata', () => {
+        const cam = new Camera(vElement, {
+            onFrame: async () => {
+                await Promise.all([
+                    hands.send({ image: vElement }),
+                    faceDetection.send({ image: vElement })
+                ]);
+            },
+            width: 1280,
+            height: 720
+        });
+        cam.start();
     });
-
-    cam.start();
   </script>
 </body>
 </html>
