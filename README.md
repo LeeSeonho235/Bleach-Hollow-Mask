@@ -1,19 +1,19 @@
 # Bleach-Hollow-Mask
-##Become a Hollow with a swipe.
+## Become a Hollow with a swipe.
 
-##How to Use
+## How to Use
 
 1. Open index.html in Chrome/Edge
 2. Allow camera access
 3. Swipe hand down (top → bottom) to activate
 4. Swipe hand up (bottom → top) to deactivate
 
-##Controls
+## Controls
 
 Hand Swipe Down: Activate Hollow Mask + Aura
 Hand Swipe Up: Deactivate effects
 
-Files
+## files
 Bleach-Hollow-Mask/
 ├── index.html
 └── assets/
