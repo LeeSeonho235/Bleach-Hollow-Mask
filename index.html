@@ -13,7 +13,7 @@
   <style>
     body { margin: 0; overflow: hidden; background-color: #000; }
     
-    /* 영압 비디오 - 안 보이게 (but not display:none!) */
+    /* Reiatsu video - hidden (but not display:none!) (영압 비디오 - 안 보이게) */
     #aura-video {
       position: absolute;
       top: 0;
@@ -24,7 +24,7 @@
       pointer-events: none;
     }
     
-    /* 카메라 비디오 - 안 보이게 (but not display:none!) */
+    /* Camera video - hidden (but not display:none!) (카메라 비디오 - 안 보이게) */
     #v_src {
       position: absolute;
       top: 0;
@@ -35,7 +35,7 @@
       pointer-events: none;
     }
     
-    /* 캔버스 - 모든 것을 여기에! */
+    /* Canvas - everything here! (캔버스 - 모든 것을 여기에!) */
     #out {
       position: absolute;
       top: 0;
@@ -60,17 +60,18 @@
   </style>
 </head>
 <body>
-  <!-- 영압 배경 비디오 -->
   <video id="aura-video" autoplay loop muted playsinline>
     <source src="assets/ichigo_reiatsu.mov" type="video/quicktime">
+    <source src="assets/ichigo_reiatsu.mov" type="video/mp4">
   </video>
   
   <video id="v_src" autoplay playsinline></video>
   <canvas id="out"></canvas>
   
   <div class="status">
-    <div>🎭 마스크: <span id="mask-status">로딩중...</span></div>
-    <div>🔥 영압: <span id="aura-status">로딩중...</span></div>
+    <div>🎭 Mask: <span id="mask-status">Loading...</span></div>
+    <div>🔥 Reiatsu: <span id="aura-status">Loading...</span></div>
+    <div>✋ Status: <span id="gesture-status">OFF (Swipe down to turn ON)</span></div>
   </div>
 
   <script>
@@ -80,39 +81,49 @@
     const maskStatus = document.getElementById('mask-status');
     const auraStatus = document.getElementById('aura-status');
     const auraVideo = document.getElementById('aura-video');
+    const gestureStatus = document.getElementById('gesture-status');
 
     let handResults = null;
     let faceResults = null;
     
-    // 영압 비디오 상태 모니터링
+    // Mask & Reiatsu state (마스크 & 영압 상태)
+    let maskEnabled = false;  // Disabled at first! (처음엔 꺼져있음!)
+    
+    // Gesture detection variables (제스처 감지 변수)
+    let gestureState = 'idle';  // 'idle', 'starting', 'swiping'
+    let gestureStartY = null;
+    let lastHandY = null;
+    let gestureCooldown = false;  // Cooldown to prevent duplicate detection! (쿨다운 - 연속 감지 방지!)
+    
+    // Monitor Reiatsu video status (영압 비디오 상태 모니터링)
     auraVideo.onloadeddata = () => {
-        auraStatus.textContent = '✅ 준비됨';
-        console.log('✅ 영압 비디오 로드 완료!');
-        auraVideo.play().catch(e => console.error('영압 재생 실패:', e));
+        auraStatus.textContent = 'Ready ✅';
+        console.log('✅ Reiatsu video loaded successfully!');
+        auraVideo.play().catch(e => console.error('❌ Failed to play Reiatsu video:', e));
     };
     auraVideo.onerror = () => {
-        auraStatus.textContent = '❌ 로드 실패';
-        console.error('❌ 영압 비디오 로드 실패!');
+        auraStatus.textContent = 'Failed ❌';
+        console.error('❌ Failed to load Reiatsu video!');
     };
     auraVideo.onplay = () => {
-        console.log('✅ 영압 재생 중!');
+        console.log('✅ Reiatsu video is playing!');
     };
     
-    // 호로 마스크 이미지 로드
+    // Load Hollow Mask image (호로 마스크 이미지 로드)
     const fullMaskImg = new Image();
-    fullMaskImg.src = 'assets/hollow_mask.png';  // 파일명 수정!
+    fullMaskImg.src = 'assets/hollow_mask.png';  // Modify filename! (파일명 수정!)
     fullMaskImg.onload = () => {
-        maskStatus.textContent = '✅ 준비됨';
-        console.log('✅ 호로 마스크 로드 완료!');
+        maskStatus.textContent = 'Ready ✅';
+        console.log('✅ Hollow mask image loaded successfully!');
     };
     fullMaskImg.onerror = () => {
-        maskStatus.textContent = '❌ 로드 실패';
-        console.error('❌ 호로 마스크 로드 실패!');
+        maskStatus.textContent = 'Failed ❌';
+        console.error('❌ Failed to load Hollow mask image!');
     };
 
-    // 그리기 함수
+    // Draw function (그리기 함수)
     function draw() {
-        // 비디오가 준비되지 않았으면 그리지 않음
+        // Do not draw if video is not ready (비디오가 준비되지 않았으면 그리지 않음)
         if (!vElement.videoWidth || !vElement.videoHeight) {
             requestAnimationFrame(draw);
             return;
@@ -125,31 +136,43 @@
 
         ctx.save();
         ctx.clearRect(0, 0, w, h);
+        
+        // Update status display with English text (상태 표시 영어 문구로 업데이트)
+        if (maskEnabled) {
+            gestureStatus.textContent = 'ON ✅ (Swipe up to turn OFF)';
+        } else {
+            gestureStatus.textContent = 'OFF (Swipe down to turn ON)';
+        }
 
-        // 1. 카메라 영상 먼저 그리기 (배경)
+        // 1. Draw camera video first as background (카메라 영상 먼저 그리기 - 배경)
         ctx.drawImage(vElement, 0, 0, w, h);
 
-        // 2. 영압 그리기 (투명 배경 자동 처리!)
-        if (auraVideo.readyState >= 2) {
+        // 2. Draw Reiatsu - only when maskEnabled is true! (영압 그리기 - maskEnabled일 때만!)
+        if (maskEnabled && auraVideo.readyState >= 2) {
             try {
-                // 영압 비디오 크기 계산
+                // Calculate Reiatsu video size - make it bigger! (영압 비디오 크기 계산 - 더 크게!)
                 const auraAspect = auraVideo.videoWidth / auraVideo.videoHeight;
-                const auraWidth = w;
+                const auraWidth = w * 2.0;  // 2x of screen width! (화면 너비의 2배!)
                 const auraHeight = auraWidth / auraAspect;
                 
-                // 맨 밑에 배치 (동그라미가 화면 맨 밑에)
-                const auraY = h - auraHeight;
+                // Shift down further so the circle hits the bottom! (아래로 더 내려서 동그라미가 완전히 바닥에!)
+                const auraY = h - auraHeight + (auraHeight * 0.15);  // 15% downwards (15% 아래로)
+                const auraX = (w - auraWidth) / 2;  // Center alignment (중앙 정렬)
                 
-                // MOV 알파 채널로 자동 투명 처리!
+                // Use screen mode to blend black transparently! (screen 모드로 검정 투명하게!)
+                ctx.globalCompositeOperation = 'screen';
                 ctx.globalAlpha = 1.0;
-                ctx.drawImage(auraVideo, 0, auraY, auraWidth, auraHeight);
+                ctx.drawImage(auraVideo, auraX, auraY, auraWidth, auraHeight);
+                
+                // Restore to original composite mode (원래 모드로 복원)
+                ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 1.0;
             } catch (e) {
-                console.error('영압 그리기 실패:', e);
+                console.error('❌ Failed to draw Reiatsu effect:', e);
             }
         }
 
-        // 3. 손 그리기
+        // 3. Draw hands (손 그리기)
         if (handResults?.multiHandLandmarks) {
             handResults.multiHandLandmarks.forEach((pts) => {
                 drawConnectors(ctx, pts, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
@@ -157,17 +180,17 @@
             });
         }
 
-        // 4. 얼굴 그리기
+        // 4. Draw face (얼굴 그리기)
         if (faceResults?.multiFaceLandmarks) {
             faceResults.multiFaceLandmarks.forEach((landmarks) => {
-                // 얼굴 메쉬
+                // Face Mesh (얼굴 메쉬)
                 drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
                 drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYE, { color: '#FF3030' });
                 drawConnectors(ctx, landmarks, FACEMESH_LEFT_EYE, { color: '#30FF30' });
                 drawConnectors(ctx, landmarks, FACEMESH_LIPS, { color: '#E0E0E0' });
 
-                // 5. 마스크 그리기
-                if (fullMaskImg.complete) {
+                // 5. Draw mask - only when maskEnabled is true! (마스크 그리기 - maskEnabled일 때만!)
+                if (maskEnabled && fullMaskImg.complete) {
                     drawFullMask(landmarks);
                 }
             });
@@ -176,37 +199,37 @@
         ctx.restore();
     }
 
-    // 전체 마스크 그리기 (양쪽 눈 맞춤!)
+    // Draw full mask fitting both eyes! (전체 마스크 그리기 - 양쪽 눈 맞춤!)
     function drawFullMask(landmarks) {
         const w = cElement.width;
         const h = cElement.height;
 
-        // 양쪽 눈 위치
-        const leftEye = landmarks[468];   // 왼쪽 눈 중심
-        const rightEye = landmarks[473];  // 오른쪽 눈 중심
+        // Position of both eyes (양쪽 눈 위치)
+        const leftEye = landmarks[468];   // Left eye center (왼쪽 눈 중심)
+        const rightEye = landmarks[473];  // Right eye center (오른쪽 눈 중심)
 
-        // 두 눈 사이 거리
+        // Distance between both eyes (두 눈 사이 거리)
         const eyeDistanceX = Math.abs(leftEye.x - rightEye.x) * w;
         
-        // 두 눈 중심점
+        // Center point of both eyes (두 눈 중심점)
         const eyesCenterX = ((leftEye.x + rightEye.x) / 2) * w;
         const eyesCenterY = ((leftEye.y + rightEye.y) / 2) * h;
 
-        // 마스크 크기 (눈 거리 기준 - 작게!)
-        const maskWidth = eyeDistanceX * 2.8;  // 눈 거리의 2.8배로 축소
-        const maskHeight = maskWidth * (fullMaskImg.height / fullMaskImg.width) * 0.6;  // 높이 40% 축소
+        // Mask size - scaled down based on eye distance! (마스크 크기 - 눈 거리 기준, 작게!)
+        const maskWidth = eyeDistanceX * 2.8;  // Downsized to 2.8x of eye distance (눈 거리의 2.8배로 축소)
+        const maskHeight = maskWidth * (fullMaskImg.height / fullMaskImg.width) * 0.6;  // 40% reduction in height (높이 40% 축소)
 
-        // 마스크 이미지에서 눈들의 상대 위치 (이미지의 약 50% 가로, 35% 세로)
+        // Relative position of eyes in the mask image - approx 50% horizontal, 35% vertical (마스크 이미지에서 눈들의 상대 위치 - 이미지의 약 50% 가로, 35% 세로)
         const maskEyesCenterX = maskWidth * 0.5;
         const maskEyesCenterY = maskHeight * 0.35;
 
-        // 마스크 위치 계산 (마스크의 눈 중심 = 실제 눈 중심)
+        // Calculate mask coordinates - mask eye center equals actual eye center (마스크 위치 계산 - 마스크의 눈 중심 = 실제 눈 중심)
         const maskX = eyesCenterX - maskEyesCenterX;
         const maskY = eyesCenterY - maskEyesCenterY;
 
-        // 마스크 그리기 (원본 방향)
+        // Draw mask in original direction (마스크 그리기 - 원본 방향)
         ctx.save();
-        ctx.scale(-1, 1);  // 미러링 상쇄
+        ctx.scale(-1, 1);  // Counteract mirroring (미러링 상쇄)
         ctx.drawImage(
             fullMaskImg,
             -(maskX + maskWidth),
@@ -217,19 +240,131 @@
         ctx.restore();
     }
 
-    // 손 결과 처리
+    // Detect top-to-bottom / bottom-to-top swipe gestures (위에서 아래로 / 아래에서 위로 스와이프 제스처 감지)
+    function detectSwipeGesture(results) {
+        // Ignore if under cooldown (쿨다운 중이면 무시)
+        if (gestureCooldown) return;
+        
+        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+            // Reset if no hands detected (손이 없으면 초기화)
+            gestureState = 'idle';
+            gestureStartY = null;
+            lastHandY = null;
+            return;
+        }
+        
+        // Use the first hand detected - either hand works (첫 번째 손 사용 - 어느 손이든 상관없음)
+        const hand = results.multiHandLandmarks[0];
+        const indexTip = hand[8];  // Tip of index finger (검지 끝)
+        const handY = indexTip.y;  // Value between 0 and 1 (0~1 사이 값)
+        
+        // Check face bounds if face is detected (얼굴이 있으면 얼굴 영역 확인)
+        if (faceResults?.multiFaceLandmarks && faceResults.multiFaceLandmarks[0]) {
+            const face = faceResults.multiFaceLandmarks[0];
+            const leftEye = face[468];
+            const rightEye = face[473];
+            
+            // Face horizontal range (얼굴 가로 범위)
+            const faceLeft = Math.min(leftEye.x, rightEye.x) - 0.15;
+            const faceRight = Math.max(leftEye.x, rightEye.x) + 0.15;
+            
+            // Check if hand is within face horizontal range (손이 얼굴 가로 범위 안에 있는지 확인)
+            const handX = indexTip.x;
+            if (handX < faceLeft || handX > faceRight) {
+                gestureState = 'idle';
+                gestureStartY = null;
+                return;
+            }
+            
+            // Above the face - above eyes (얼굴 위쪽 - 눈 위)
+            const faceTop = Math.min(leftEye.y, rightEye.y) - 0.15;
+            // Below the face - below eyes (얼굴 아래쪽 - 눈 아래)
+            const faceBottom = Math.max(leftEye.y, rightEye.y) + 0.2;
+            
+            // State machine (상태 머신)
+            if (gestureState === 'idle') {
+                if (!maskEnabled) {
+                    // OFF state: detect top-to-bottom gesture to turn ON (OFF 상태: 위→아래 제스처 감지 - 켜기)
+                    if (handY < faceTop) {
+                        gestureState = 'swipe_down_start';
+                        gestureStartY = handY;
+                        lastHandY = handY;
+                        console.log('🖐️ Swipe down gesture detection started!');
+                    }
+                } else {
+                    // ON state: detect bottom-to-top gesture to turn OFF (ON 상태: 아래→위 제스처 감지 - 끄기)
+                    if (handY > faceBottom) {
+                        gestureState = 'swipe_up_start';
+                        gestureStartY = handY;
+                        lastHandY = handY;
+                        console.log('🖐️ Swipe up gesture detection started!');
+                    }
+                }
+            } 
+            else if (gestureState === 'swipe_down_start') {
+                // Moving downwards - turning ON (아래로 움직이는 중 - 켜기)
+                if (handY > lastHandY) {
+                    // Has it moved down far enough? - over 0.25 movement (충분히 아래로 내려왔는가? - 0.25 이상 이동)
+                    if (handY - gestureStartY > 0.25) {
+                        // Turn ON! (켜기!)
+                        maskEnabled = true;
+                        console.log('🎭 Hollow Mask Activated (ON)!');
+                        
+                        // Reset state + trigger cooldown (상태 초기화 + 쿨다운)
+                        gestureState = 'idle';
+                        gestureStartY = null;
+                        gestureCooldown = true;
+                        setTimeout(() => { gestureCooldown = false; }, 1000);  // 1-second cooldown (1초 쿨다운)
+                    }
+                } else {
+                    // Cancel if moving upwards (위로 움직이면 취소)
+                    gestureState = 'idle';
+                    gestureStartY = null;
+                }
+                lastHandY = handY;
+            }
+            else if (gestureState === 'swipe_up_start') {
+                // Moving upwards - turning OFF (위로 움직이는 중 - 끄기)
+                if (handY < lastHandY) {
+                    // Has it moved up far enough? - over 0.25 movement (충분히 위로 올라왔는가? - 0.25 이상 이동)
+                    if (gestureStartY - handY > 0.25) {
+                        // Turn OFF! (끄기!)
+                        maskEnabled = false;
+                        console.log('🎭 Hollow Mask Deactivated (OFF)!');
+                        
+                        // Reset state + trigger cooldown (상태 초기화 + 쿨다운)
+                        gestureState = 'idle';
+                        gestureStartY = null;
+                        gestureCooldown = true;
+                        setTimeout(() => { gestureCooldown = false; }, 1000);  // 1-second cooldown (1초 쿨다운)
+                    }
+                } else {
+                    // Cancel if moving downwards (아래로 움직이면 취소)
+                    gestureState = 'idle';
+                    gestureStartY = null;
+                }
+                lastHandY = handY;
+            }
+        }
+    }
+
+    // Process hand detection results (손 결과 처리)
     function onHandResults(results) {
         handResults = results;
+        
+        // Gesture detection (제스처 감지)
+        detectSwipeGesture(results);
+        
         draw();
     }
 
-    // 얼굴 결과 처리
+    // Process face detection results (얼굴 결과 처리)
     function onFaceResults(results) {
         faceResults = results;
         draw();
     }
 
-    // MediaPipe Hands 초기화
+    // Initialize MediaPipe Hands (MediaPipe Hands 초기화)
     const hands = new Hands({
         locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
     });
@@ -241,7 +376,7 @@
     });
     hands.onResults(onHandResults);
 
-    // MediaPipe Face Mesh 초기화
+    // Initialize MediaPipe Face Mesh (MediaPipe Face Mesh 초기화)
     const faceMesh = new FaceMesh({
         locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
     });
@@ -253,7 +388,7 @@
     });
     faceMesh.onResults(onFaceResults);
 
-    // 카메라 시작
+    // Start Camera (카메라 시작)
     const cam = new Camera(vElement, {
         onFrame: async () => { 
             await hands.send({ image: vElement });
@@ -265,7 +400,7 @@
     
     cam.start();
 
-    console.log('✅ 간단 버전: 전체 마스크만!');
+    console.log('✅ System fully operational: Full mask mode configured!');
   </script>
 </body>
 </html>
